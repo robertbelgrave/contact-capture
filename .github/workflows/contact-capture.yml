@@ -1,0 +1,38 @@
+name: Contact Capture
+
+on:
+  schedule:
+    # Runs twice daily — adjust these to your timezone
+    # Default: Noon ET (17:00 UTC) and 7 PM ET (00:00 UTC)
+    - cron: '0 17 * * *'
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Manual trigger anytime from GitHub Actions tab
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run contact capture
+        env:
+          # Required
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          # Optional — each adds features
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          APOLLO_API_KEY: ${{ secrets.APOLLO_API_KEY }}
+        run: python capture.py
