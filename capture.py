@@ -175,38 +175,33 @@ Return ONLY valid JSON. No markdown, no explanation."""
 # --- Apollo Enrichment ---
 
 def enrich_with_apollo(name, company_domain=None):
-    """Enrich contact via Apollo People Match API."""
+    """Search Apollo for the contact and return enrichment data."""
     if not APOLLO_API_KEY:
         return None
 
-    # Split name into first/last for better matching
-    name_parts = name.strip().split(None, 1)
-    first_name = name_parts[0] if name_parts else name
-    last_name = name_parts[1] if len(name_parts) > 1 else ""
-
-    # Build query params for the people/match endpoint
-    params = {
-        "first_name": first_name,
-        "last_name": last_name,
+    payload = {
+        "q_person_name": name,
+        "page": 1,
+        "per_page": 1,
     }
     if company_domain:
-        params["domain"] = company_domain
+        payload["q_organization_domains"] = company_domain
 
     resp = requests.post(
-        "https://api.apollo.io/api/v1/people/match",
-        headers={"x-api-key": APOLLO_API_KEY, "Content-Type": "application/json"},
-        params=params,
+        "https://api.apollo.io/api/v1/mixed_people/api_search",
+        headers={"X-Api-Key": APOLLO_API_KEY, "Content-Type": "application/json"},
+        json=payload,
     )
 
     if resp.status_code != 200:
         print(f"Apollo API error: {resp.status_code} — {resp.text[:200]}")
         return None
 
-    data = resp.json()
-    p = data.get("person")
-    if not p:
+    people = resp.json().get("people", [])
+    if not people:
         return None
 
+    p = people[0]
     org = p.get("organization") or {}
     return {
         "name": p.get("name"),
