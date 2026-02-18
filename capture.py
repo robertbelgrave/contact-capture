@@ -13,6 +13,7 @@ Setup: See README.md for full instructions.
 
 import os
 import sys
+import re
 import json
 import base64
 import requests
@@ -347,6 +348,73 @@ def _notion_heading(text):
     }
 
 
+def _parse_rich_text(text):
+    """Convert markdown bold (**text**) to Notion rich text annotations."""
+    segments = []
+    parts = re.split(r'(\*\*.*?\*\*)', text)
+    for part in parts:
+        if not part:
+            continue
+        if part.startswith('**') and part.endswith('**'):
+            content = part[2:-2]
+            if content:
+                segments.append({
+                    "text": {"content": content[:2000]},
+                    "annotations": {"bold": True},
+                })
+        else:
+            segments.append({"text": {"content": part[:2000]}})
+    return segments if segments else [{"text": {"content": ""}}]
+
+
+def _markdown_to_notion_blocks(markdown_text):
+    """Convert a markdown dossier into native Notion blocks."""
+    blocks = []
+    for line in markdown_text.split('\n'):
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # H1 heading → heading_2 (page title is h1)
+        if stripped.startswith('# '):
+            blocks.append({
+                "object": "block", "type": "heading_2",
+                "heading_2": {"rich_text": [{"text": {"content": stripped[2:].strip()[:2000]}}]},
+            })
+
+        # H2 heading
+        elif stripped.startswith('## '):
+            blocks.append({
+                "object": "block", "type": "heading_3",
+                "heading_3": {"rich_text": [{"text": {"content": stripped[3:].strip()[:2000]}}]},
+            })
+
+        # Standalone bold line like **Background:** → section heading
+        elif re.match(r'^\*\*[^*]+\*\*\s*$', stripped):
+            heading_text = stripped.strip('* ').rstrip(':')
+            blocks.append({
+                "object": "block", "type": "heading_3",
+                "heading_3": {"rich_text": [{"text": {"content": heading_text[:2000]}}]},
+            })
+
+        # Bullet item
+        elif stripped.startswith('- ') or stripped.startswith('* '):
+            item_text = stripped[2:].strip()
+            blocks.append({
+                "object": "block", "type": "bulleted_list_item",
+                "bulleted_list_item": {"rich_text": _parse_rich_text(item_text)},
+            })
+
+        # Regular paragraph with inline bold support
+        else:
+            blocks.append({
+                "object": "block", "type": "paragraph",
+                "paragraph": {"rich_text": _parse_rich_text(stripped)},
+            })
+
+    return blocks
+
+
 def create_notion_contact(parsed, enriched, raw_text, source, dossier=None):
     """Create a contact page in the Notion database."""
     name = parsed.get("name") or "Unknown Contact"
@@ -376,7 +444,7 @@ def create_notion_contact(parsed, enriched, raw_text, source, dossier=None):
 
     if dossier:
         children.append(_notion_heading("Dossier"))
-        children.extend(_notion_paragraph(dossier))
+        children.extend(_markdown_to_notion_blocks(dossier))
         children.append({
             "object": "block", "type": "divider", "divider": {},
         })
